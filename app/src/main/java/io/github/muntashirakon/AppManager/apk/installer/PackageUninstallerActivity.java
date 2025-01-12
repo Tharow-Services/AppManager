@@ -38,6 +38,11 @@ public class PackageUninstallerActivity extends BaseActivity {
     private int mUserId;
     private boolean isUninstallFromAllUsers;
 
+    @Override
+    public boolean getTransparentBackground() {
+        return true;
+    }
+
 
     @RequiresPermission(android.Manifest.permission.REQUEST_DELETE_PACKAGES)
     @Override
@@ -53,7 +58,7 @@ public class PackageUninstallerActivity extends BaseActivity {
         } catch (PackageManager.NameNotFoundException e) {
             throw new RuntimeException(e);
         }
-        this.mAppLabel = mApplicationInfo.name;
+        this.mAppLabel = mApplicationInfo.loadLabel(getPackageManager()).toString();
         uninstallDialog();
     }
 

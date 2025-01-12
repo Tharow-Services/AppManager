@@ -803,23 +803,6 @@ public final class PackageInstallerCompat {
         }
         return mFinalStatus == PackageInstaller.STATUS_SUCCESS;
     }
-    @NonNull
-    @Contract("_ -> new")
-    public static InstallerDialogHelper.OnClickButtonsListener setPermissionsResultOnClickButtons(int sessionId) {
-        PackageInstallerCompat installerCompat = getNewInstance();
-        getNewInstance().mSessionId = sessionId;
-        return new InstallerDialogHelper.OnClickButtonsListener() {
-            @Override
-            public void triggerInstall() {
-                installerCompat.setPermissionsResult(sessionId, true);
-            }
-
-            @Override
-            public void triggerCancel() {
-                installerCompat.setPermissionsResult(sessionId, false);
-            }
-        };
-    }
     public void setPermissionsResult(int sessionId, boolean accepted) {
         try {
             mPackageInstaller = PackageManagerCompat.getPackageInstaller();

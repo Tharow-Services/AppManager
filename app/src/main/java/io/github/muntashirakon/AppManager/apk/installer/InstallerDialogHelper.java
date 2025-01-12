@@ -3,6 +3,7 @@
 package io.github.muntashirakon.AppManager.apk.installer;
 
 import android.content.Context;
+import android.content.pm.PackageInstaller;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.Button;
@@ -134,6 +135,22 @@ public final class InstallerDialogHelper {
         mNeutralBtn.setVisibility(View.VISIBLE);
         mNeutralBtn.setText(R.string.app_info);
         mNeutralBtn.setOnClickListener(appInfoButtonListener);
+        mPositiveBtn.setVisibility(View.VISIBLE);
+        mPositiveBtn.setText(installButtonRes);
+        mPositiveBtn.setOnClickListener(v -> onClickButtonsListener.triggerInstall());
+        mNegativeBtn.setVisibility(View.VISIBLE);
+        mNegativeBtn.setText(R.string.cancel);
+        mNegativeBtn.setOnClickListener(v -> onClickButtonsListener.triggerCancel());
+        // Body
+        mLayout.setVisibility(View.GONE);
+        mMessage.setVisibility(View.VISIBLE);
+        mMessage.setText(R.string.install_app_message);
+        mFragmentContainer.setVisibility(View.GONE);
+    }
+    public void showSessionConfirmationDialog(@StringRes int installButtonRes,
+                                              @NonNull OnClickButtonsListener onClickButtonsListener) {
+        // Buttons
+        mNeutralBtn.setVisibility(View.GONE);
         mPositiveBtn.setVisibility(View.VISIBLE);
         mPositiveBtn.setText(installButtonRes);
         mPositiveBtn.setOnClickListener(v -> onClickButtonsListener.triggerInstall());
