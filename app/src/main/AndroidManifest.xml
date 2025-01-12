@@ -147,7 +147,9 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-
+    <uses-permission
+        android:name="android.permission.PACKAGE_VERIFICATION_AGENT"
+        tools:ignore="ProtectedPermissions" />
     <application
         android:name=".AppManager"
         android:allowBackup="true"
@@ -164,6 +166,32 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         tools:ignore="UnusedAttribute">
+        <activity android:name=".apk.installer.PackageUninstallerActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="true"
+            android:label="@string/uninstall">
+            <intent-filter android:priority="1">
+                <action android:name="android.intent.action.DELETE" />
+                <action android:name="android.intent.action.UNINSTALL_PACKAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity>
+        <!--activity-alias
+            android:name=".UninstallerActivity"
+            android:targetActivity=".intercept.ActivityInterceptor"
+            android:label="@string/uninstall"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter android:priority="1">
+                <action android:name="android.intent.action.DELETE" />
+                <action android:name="android.intent.action.UNINSTALL_PACKAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </activity-alias-->
         <activity
             android:name=".filters.FinderActivity"
             android:exported="false"
@@ -564,6 +592,14 @@
             android:launchMode="singleInstance"
             android:taskAffinity=""
             android:theme="@style/AppTheme.TransparentBackground">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PRE_APPROVAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 

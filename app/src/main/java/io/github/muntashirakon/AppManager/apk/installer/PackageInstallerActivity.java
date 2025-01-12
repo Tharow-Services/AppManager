@@ -2,6 +2,8 @@
 
 package io.github.muntashirakon.AppManager.apk.installer;
 
+import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerCompat.ACTION_CONFIRM_INSTALL;
+import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerCompat.ACTION_CONFIRM_PRE_APPROVAL;
 import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerCompat.STATUS_FAILURE_ABORTED;
 import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerCompat.STATUS_FAILURE_BLOCKED;
 import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerCompat.STATUS_FAILURE_CONFLICT;
@@ -18,6 +20,7 @@ import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerC
 
 import android.Manifest;
 import android.annotation.UserIdInt;
+import android.app.Application;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -25,10 +28,12 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.os.UserHandleHidden;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -49,6 +54,7 @@ import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
 
+import io.github.muntashirakon.AppManager.AppManager;
 import io.github.muntashirakon.AppManager.BaseActivity;
 import io.github.muntashirakon.AppManager.BuildConfig;
 import io.github.muntashirakon.AppManager.R;
@@ -116,7 +122,7 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
 
     private static final String EXTRA_APK_FILE_LINK = "link";
     public static final String EXTRA_INSTALL_EXISTING = "install_existing";
-    public static final String EXTRA_PACKAGE_NAME = "pkg";
+    public static final String EXTRA_PACKAGE_NAME = PackageInstaller.EXTRA_PACKAGE_NAME;
     public static final String ACTION_PACKAGE_INSTALLED = BuildConfig.APPLICATION_ID + ".action.PACKAGE_INSTALLED";
 
     private int mSessionId = -1;
@@ -193,7 +199,9 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
             return;
         }
         Log.d(TAG, "On create, intent: %s", intent);
-        if (ACTION_PACKAGE_INSTALLED.equals(intent.getAction())) {
+        if (ACTION_PACKAGE_INSTALLED.equals(intent.getAction()) ||
+                ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction()) ||
+                ACTION_CONFIRM_INSTALL.equals(intent.getAction())) {
             onNewIntent(intent);
             return;
         }
@@ -382,6 +390,7 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
         super.onNewIntent(intent);
         Log.d(TAG, "New intent called: %s", intent);
         setIntent(intent);
+
         // Check for action first
         if (ACTION_PACKAGE_INSTALLED.equals(intent.getAction())) {
             mSessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1);
@@ -400,6 +409,26 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
                 } // else let the original activity decide what to do
             }
             return;
+        } else if (ACTION_CONFIRM_INSTALL.equals(intent.getAction())) {
+            mSessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1);
+            try {
+                PackageInstaller.SessionInfo sessionInfo = PackageManagerCompat.getPackageInstaller().getSessionInfo(mSessionId);
+                showApprovalDialog(sessionInfo.getAppPackageName());
+            } catch (RemoteException e) {
+                Log.e(TAG, "sessionInfo: %e", e);
+                throw new RuntimeException(e);
+            }
+
+
+        } else if (ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction())) {
+            mSessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1);
+            try {
+                PackageInstaller.SessionInfo sessionInfo = PackageManagerCompat.getPackageInstaller().getSessionInfo(mSessionId);
+                showApprovalDialog(sessionInfo.getAppPackageName());
+            } catch (RemoteException e) {
+                Log.e(TAG, "sessionInfo: %e", e);
+                throw new RuntimeException(e);
+            }
         }
         // New APK files added
         synchronized (mApkQueue) {
@@ -518,6 +547,10 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
             sb.append(", ").append(res.getQuantityString(R.plurals.no_of_trackers, trackers, trackers));
         }
         return sb.toString();
+    }
+
+    public void showApprovalDialog(String packageName) {
+        mDialogHelper.showInstallConfirmationDialog(R.string.install, PackageInstallerCompat.setPermissionsResultOnClickButtons(mSessionId), (ignored)->{});
     }
 
     public void showInstallationFinishedDialog(String packageName, int result, @Nullable String blockingPackage,

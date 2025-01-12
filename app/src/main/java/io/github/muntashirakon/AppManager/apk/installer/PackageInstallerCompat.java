@@ -35,9 +35,12 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.annotation.RequiresPermission;
 import androidx.annotation.WorkerThread;
 import androidx.core.app.PendingIntentCompat;
 import androidx.core.content.ContextCompat;
+
+import org.jetbrains.annotations.Contract;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -84,6 +87,9 @@ public final class PackageInstallerCompat {
     // For rootless installer to prevent PackageInstallerService from hanging
     public static final String ACTION_INSTALL_INTERACTION_BEGIN = BuildConfig.APPLICATION_ID + ".action.INSTALL_INTERACTION_BEGIN";
     public static final String ACTION_INSTALL_INTERACTION_END = BuildConfig.APPLICATION_ID + ".action.INSTALL_INTERACTION_END";
+    public static final String ACTION_CONFIRM_PRE_APPROVAL = "android.content.pm.action.CONFIRM_PRE_APPROVAL";
+    public static final String ACTION_CONFIRM_INSTALL = "android.content.pm.action.CONFIRM_INSTALL";
+    public static final String EXTRA_UNINSTALL_ALL_USERS = "android.intent.extra.UNINSTALL_ALL_USERS";
 
     @IntDef({
             STATUS_SUCCESS,
@@ -796,6 +802,47 @@ public final class PackageInstallerCompat {
             BroadcastUtils.sendPackageAltered(ContextUtils.getContext(), new String[]{mPackageName});
         }
         return mFinalStatus == PackageInstaller.STATUS_SUCCESS;
+    }
+    @NonNull
+    @Contract("_ -> new")
+    public static InstallerDialogHelper.OnClickButtonsListener setPermissionsResultOnClickButtons(int sessionId) {
+        PackageInstallerCompat installerCompat = getNewInstance();
+        getNewInstance().mSessionId = sessionId;
+        return new InstallerDialogHelper.OnClickButtonsListener() {
+            @Override
+            public void triggerInstall() {
+                installerCompat.setPermissionsResult(sessionId, true);
+            }
+
+            @Override
+            public void triggerCancel() {
+                installerCompat.setPermissionsResult(sessionId, false);
+            }
+        };
+    }
+    public void setPermissionsResult(int sessionId, boolean accepted) {
+        try {
+            mPackageInstaller = PackageManagerCompat.getPackageInstaller();
+            mPackageInstaller.setPermissionsResult(sessionId, accepted);
+        } catch (RemoteException e) {
+            callFinish(STATUS_FAILURE_SESSION_COMMIT);
+            Log.e(TAG, "SetPermissionsResult: failed to set permission result for given session", e);
+        }
+
+    }
+
+    @RequiresPermission("android.permission.PACKAGE_VERIFICATION_AGENT")
+    public IPackageInstallerSession openSession(final int sessionId) {
+
+        try {
+            mPackageInstaller = PackageManagerCompat.getPackageInstaller();
+            return Refine.unsafeCast(new PackageInstallerHidden.Session(IPackageInstallerSession.Stub.asInterface(
+                    new ProxyBinder(mPackageInstaller.openSession(sessionId).asBinder()))));
+        } catch (RemoteException e) {
+            callFinish(STATUS_FAILURE_SESSION_CREATE);
+            Log.e(TAG, "OpenSession: Failed to open install session.", e);
+            return null;
+        }
     }
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
