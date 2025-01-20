@@ -3,22 +3,17 @@ package io.github.muntashirakon.AppManager.apk.installer;
 import static io.github.muntashirakon.AppManager.utils.UIUtils.displayLongToast;
 
 import android.Manifest;
-import android.app.Dialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandleHidden;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresPermission;
-import androidx.core.content.ContextCompat;
-
-import java.util.ArrayList;
 
 import io.github.muntashirakon.AppManager.BaseActivity;
 import io.github.muntashirakon.AppManager.R;
@@ -53,9 +48,8 @@ public class PackageUninstallerActivity extends BaseActivity {
         this.mUserId = UserHandleHidden.myUserId();
         try {
             this.mApplicationInfo = PackageManagerCompat.getApplicationInfo(mPackageName, ApplicationInfo.FLAG_INSTALLED, mUserId);
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        } catch (PackageManager.NameNotFoundException e) {
+        } catch (RemoteException | PackageManager.NameNotFoundException e) {
+            Log.e(TAG, "onAuthenticated: getApplicationInfo", e);
             throw new RuntimeException(e);
         }
         this.mAppLabel = mApplicationInfo.loadLabel(getPackageManager()).toString();
@@ -69,7 +63,6 @@ public class PackageUninstallerActivity extends BaseActivity {
                 Intent uninstallIntent = new Intent(Intent.ACTION_DELETE);
                 uninstallIntent.setData(Uri.parse("package:" + mPackageName));
                 ActivityManagerCompat.startActivity(uninstallIntent, mUserId);
-                // TODO: 19/8/24 Watch for uninstallation
             } catch (Throwable th) {
                 UIUtils.displayLongToast("Error: " + th.getLocalizedMessage());
             }
@@ -96,6 +89,7 @@ public class PackageUninstallerActivity extends BaseActivity {
                 }))
                 .setNegativeButton(R.string.cancel, (dialog, which, keepData) -> {
                     if (dialog != null) dialog.cancel();
+                    finish();
                 });
         if ((mApplicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) {
             builder.setNeutralButton(R.string.uninstall_updates, (dialog, which, keepData) ->

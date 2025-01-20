@@ -1,0 +1,57 @@
+runtime_resource_overlay {
+    name: "Interecptor-Overlay",
+    manifest : "OverlayManifest",
+    product_specific: true,
+    resource_dirs : ["res"]
+
+}
+
+genrule {
+    name: "AppManger-genrule",
+    cmd: "gradlew app:assembleRelease"
+}
+
+android_library {
+    name: "hidden-api",
+    owner : "AppManager",
+    src : "hiddenapi/src/java/**/*.java"
+}
+
+android_app_import {
+	name: "AppManager",
+	owner: "TherayTharow",
+	apk: "app/build/outputs/release/app-release-unsigned.apk",
+	certificate: "platform",
+	dex_preopt: {
+		enabled: false,
+	},
+	privileged: true,
+	presigned: false,
+    overrides : ["PackageInstaller"],
+    required : [
+    "AppManager-genrule",
+    "io.github.muntashirakon.AppManager_sysconfig.xml",
+    "privapp-permissions_io.github.muntashirakon.AppManager.xml",
+    "default-permissions_io.github.muntashirakon.AppManager.xml",
+    "Interceptor-Overlay"
+    ],
+}
+
+
+prebuilt_etc {
+  name: "io.github.muntashirakon.AppManager_sysconfig.xml",
+  src: "platform/sysconfig.xml",
+  sub_dir: "sysconfig",
+}
+
+prebuilt_etc {
+  name: "privapp-permissions_io.github.muntashirakon.AppManager.xml",
+  src: "platform/permissions.xml",
+  sub_dir: "permissions",
+}
+
+prebuilt_etc {
+    name: "default-permissions_io.github.muntashirakon.AppManager.xml",
+    src: "platform/default-permissions.xml",
+    sub_dir: "default-permissions"
+}

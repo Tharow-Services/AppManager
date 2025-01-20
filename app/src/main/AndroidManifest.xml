@@ -685,7 +685,7 @@
             android:taskAffinity="" />
         <activity
             android:name=".intercept.ActivityInterceptor"
-            android:enabled="true"
+            android:enabled="@bool/is_interceptor_enabled"
             android:exported="true"
             android:label="@string/interceptor"
             android:taskAffinity=""

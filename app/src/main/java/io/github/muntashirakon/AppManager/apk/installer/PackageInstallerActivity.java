@@ -25,14 +25,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.IPackageInstaller;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.RemoteException;
 import android.os.UserHandleHidden;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -47,7 +45,6 @@ import androidx.annotation.UiThread;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.pm.PackageInfoCompat;
-import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModelProvider;
 
 import java.util.LinkedList;
@@ -121,7 +118,7 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
 
     private static final String EXTRA_APK_FILE_LINK = "link";
     public static final String EXTRA_INSTALL_EXISTING = "install_existing";
-    public static final String EXTRA_PACKAGE_NAME = PackageInstaller.EXTRA_PACKAGE_NAME;
+    public static final String EXTRA_PACKAGE_NAME = "pkg";
     public static final String ACTION_PACKAGE_INSTALLED = BuildConfig.APPLICATION_ID + ".action.PACKAGE_INSTALLED";
 
     private int mSessionId = -1;
@@ -202,10 +199,11 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
             onNewIntent(intent);
             return;
         }
-        if (ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction()) ||
-                ACTION_CONFIRM_INSTALL.equals(intent.getAction())) {
-            onSessionIntent(intent);
-            return;
+        if (ACTION_CONFIRM_INSTALL.equals(intent.getAction()) ||
+                        ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction())) {
+            mSessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1);
+            intent.putExtra(EXTRA_APK_FILE_LINK, ApkSource.getApkSource(new Uri.Builder().build(), ""));
+
         }
         mModel = new ViewModelProvider(this).get(PackageInstallerViewModel.class);
         if (!bindService(
@@ -222,6 +220,24 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
             }
         }
         mModel.packageInfoLiveData().observe(this, newPackageInfo -> {
+            if (newPackageInfo == null &&
+                    (ACTION_CONFIRM_INSTALL.equals(intent.getAction()) ||
+                            ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction()))) {
+                PackageInstallerCompat installerCompat = PackageInstallerCompat.getNewInstance();
+                mDialogHelper.showSessionConfirmationDialog(R.string.install, new InstallerDialogHelper.OnClickButtonsListener() {
+                    @Override
+                    public void triggerInstall() {
+                        installerCompat.setPermissionsResult(mSessionId, true);
+                        finish();
+                    }
+                    @Override
+                    public void triggerCancel() {
+                        installerCompat.setPermissionsResult(mSessionId, false);
+                        finish();
+                    }
+                });
+                return;
+            }
             if (newPackageInfo == null) {
                 mDialogHelper.showParseFailedDialog(v -> triggerCancel());
                 return;
@@ -384,48 +400,6 @@ public class PackageInstallerActivity extends BaseActivity implements InstallerD
             // For some reason, the service is empty
             // Install next app instead
             goToNext();
-        }
-    }
-    private void onSessionIntent(@NonNull Intent intent) {
-        mSessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1);
-        IPackageInstaller installer;
-        PackageInstaller.SessionInfo sessionInfo;
-        PackageInstallerCompat installerCompat = PackageInstallerCompat.getNewInstance();
-        try {
-            installer = PackageManagerCompat.getPackageInstaller();
-            sessionInfo = installer.getSessionInfo(mSessionId);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to getPackageInstaller", e);
-            throw new RuntimeException(e);
-        }
-
-        InstallerDialogHelper.OnClickButtonsListener onClickButtonsListener = new InstallerDialogHelper.OnClickButtonsListener() {
-            @Override
-            public void triggerInstall() {
-                installerCompat.setPermissionsResult(mSessionId, true);
-            }
-
-            @Override
-            public void triggerCancel() {
-                installerCompat.setPermissionsResult(mSessionId, false);
-            }
-        };
-
-        mModel = new ViewModelProvider(this).get(PackageInstallerViewModel.class);
-        if (!bindService(
-                new Intent(this, PackageInstallerService.class), mServiceConnection, BIND_AUTO_CREATE)) {
-            throw new RuntimeException("Unable to bind PackageInstallerService");
-        }
-
-        // Init fragment
-        mInstallerDialogFragment = new InstallerDialogFragment();
-        mInstallerDialogFragment.setCancelable(false);
-        mInstallerDialogFragment.onCreateDialog(null);
-        mInstallerDialogFragment.showNow(getSupportFragmentManager(), InstallerDialogFragment.TAG);
-        if (ACTION_CONFIRM_INSTALL.equals(intent.getAction())) {
-            mDialogHelper.showSessionConfirmationDialog(R.string.install, onClickButtonsListener);
-        } else if (ACTION_CONFIRM_PRE_APPROVAL.equals(intent.getAction())) {
-            mDialogHelper.showSessionConfirmationDialog(R.string.install, onClickButtonsListener);
         }
     }
 

@@ -3,7 +3,6 @@
 package io.github.muntashirakon.AppManager.apk.installer;
 
 import android.content.Context;
-import android.content.pm.PackageInstaller;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.Button;
@@ -149,6 +148,11 @@ public final class InstallerDialogHelper {
     }
     public void showSessionConfirmationDialog(@StringRes int installButtonRes,
                                               @NonNull OnClickButtonsListener onClickButtonsListener) {
+        mTitleBuilder.setTitle(R.string.confirm_installation)
+                .setStartIcon(R.drawable.ic_get_app)
+                .setSubtitle(null)
+                .setEndIcon(null, null);
+
         // Buttons
         mNeutralBtn.setVisibility(View.GONE);
         mPositiveBtn.setVisibility(View.VISIBLE);
