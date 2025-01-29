@@ -33,10 +33,10 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
+import androidx.collection.LruCache;
+import androidx.collection.SimpleArrayMap;
 import androidx.collection.SparseArrayCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.util.Pair;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
@@ -68,11 +68,13 @@ import io.github.muntashirakon.AppManager.self.SelfPermissions;
 import io.github.muntashirakon.AppManager.self.imagecache.ImageLoader;
 import io.github.muntashirakon.AppManager.settings.Ops;
 import io.github.muntashirakon.AppManager.shortcut.CreateShortcutDialogFragment;
+import io.github.muntashirakon.AppManager.utils.ThreadUtils;
 import io.github.muntashirakon.util.AdapterUtils;
 import io.github.muntashirakon.AppManager.utils.PackageUtils;
 import io.github.muntashirakon.AppManager.utils.UIUtils;
 import io.github.muntashirakon.AppManager.utils.Utils;
 import io.github.muntashirakon.dialog.TextInputDropdownDialogBuilder;
+import io.github.muntashirakon.util.UiUtils;
 import io.github.muntashirakon.widget.MaterialAutoCompleteTextView;
 
 // Copyright 2020 Muntashir Al-Islam
@@ -298,6 +300,8 @@ public class ActivityInterceptor extends BaseActivity {
     @Nullable
     private Intent mLastResultIntent = null;
 
+    private final LruCache<String, CharSequence> mPackageLabelMap = new LruCache<>(16);
+
     private volatile boolean mAreTextWatchersActive;
 
     private final ActivityResultLauncher<Intent> mIntentLauncher = registerForActivityResult(
@@ -429,8 +433,24 @@ public class ActivityInterceptor extends BaseActivity {
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
             if (packageName != null) {
-                // TODO: 4/2/22 Fetch label in a different thread, for the given user
-                actionBar.setTitle(PackageUtils.getPackageLabel(getPackageManager(), packageName));
+                CharSequence label = mPackageLabelMap.get(packageName);
+                if (label != null) {
+                    actionBar.setTitle(label);
+                } else {
+                    // Need to load the label
+                    ThreadUtils.postOnBackgroundThread(() -> {
+                        CharSequence appLabel = PackageUtils.getPackageLabel(getPackageManager(), packageName, mUserHandle);
+                        ThreadUtils.postOnMainThread(() -> {
+                            if (packageName.equals(appLabel.toString())) {
+                                // Ignore labels named after their package names
+                                actionBar.setTitle(R.string.interceptor);
+                                return;
+                            }
+                            actionBar.setTitle(appLabel);
+                            mPackageLabelMap.put(packageName, appLabel);
+                        });
+                    });
+                }
             } else actionBar.setTitle(R.string.interceptor);
         }
     }
@@ -454,16 +474,16 @@ public class ActivityInterceptor extends BaseActivity {
     }
 
     @NonNull
-    private List<Pair<String, Object>> getExtras() {
+    private SimpleArrayMap<String, Object> getExtras() {
         Bundle intentBundle;
         if (mMutableIntent == null || (intentBundle = mMutableIntent.getExtras()) == null) {
-            return Collections.emptyList();
+            return new SimpleArrayMap<>(0);
         }
-        List<Pair<String, Object>> extras = new ArrayList<>();
+        SimpleArrayMap<String, Object> extras = new SimpleArrayMap<>();
         for (String extraKey : intentBundle.keySet()) {
             Object extraValue = intentBundle.get(extraKey);
             if (extraValue == null) continue;
-            extras.add(new Pair<>(extraKey, extraValue));
+            extras.put(extraKey, extraValue);
         }
         return extras;
     }
@@ -541,7 +561,7 @@ public class ActivityInterceptor extends BaseActivity {
         }
         if (mUseRoot || SelfPermissions.checkCrossUserPermission(mUserHandle, false)) {
             try {
-                return PackageManagerCompat.queryIntentActivities(this, mMutableIntent, 0, mUserHandle);
+                return PackageManagerCompat.queryIntentActivities(this, mMutableIntent, PackageManager.MATCH_ALL, mUserHandle);
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -578,65 +598,79 @@ public class ActivityInterceptor extends BaseActivity {
         // Setup identifier
         TextInputLayout idLayout = findViewById(R.id.type_id_layout);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            idLayout.setEndIconOnClickListener(v -> mIdView.setText(UUID.randomUUID().toString()));
+            idLayout.setEndIconOnClickListener(v -> {
+                mIdView.setText(UUID.randomUUID().toString());
+                mIdView.requestFocus();
+            });
         } else idLayout.setVisibility(View.GONE);
 
         // Setup categories
-        findViewById(R.id.intent_categories_add_btn).setOnClickListener(v ->
-                new TextInputDropdownDialogBuilder(this, R.string.category)
-                        .setTitle(R.string.category)
-                        .setDropdownItems(INTENT_CATEGORIES, -1, true)
-                        .setNegativeButton(R.string.cancel, null)
-                        .setPositiveButton(R.string.ok, (dialog, which, inputText, isChecked) -> {
-                            if (!TextUtils.isEmpty(inputText)) {
-                                //noinspection ConstantConditions
-                                mMutableIntent.addCategory(inputText.toString().trim());
-                                mCategoriesAdapter.setDefaultList(mMutableIntent.getCategories());
-                                showTextViewIntentData(null);
-                            }
-                        })
-                        .show());
+        MaterialButton addCategoriesButton = findViewById(R.id.intent_categories_add_btn);
+        addCategoriesButton.setOnClickListener(v -> {
+            UiUtils.fixFocus(addCategoriesButton);
+            new TextInputDropdownDialogBuilder(this, R.string.category)
+                    .setTitle(R.string.category)
+                    .setDropdownItems(INTENT_CATEGORIES, -1, true)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.ok, (dialog, which, inputText, isChecked) -> {
+                        if (!TextUtils.isEmpty(inputText)) {
+                            //noinspection ConstantConditions
+                            mMutableIntent.addCategory(inputText.toString().trim());
+                            mCategoriesAdapter.setDefaultList(mMutableIntent.getCategories());
+                            showTextViewIntentData(null);
+                            showResetIntentButton(true);
+                        }
+                    })
+                    .show();
+        });
         RecyclerView categoriesRecyclerView = findViewById(R.id.intent_categories);
-        categoriesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        categoriesRecyclerView.setLayoutManager(UIUtils.getGridLayoutAt450Dp(this));
         mCategoriesAdapter = new CategoriesRecyclerViewAdapter(this);
         categoriesRecyclerView.setAdapter(mCategoriesAdapter);
 
         // Setup flags
-        findViewById(R.id.intent_flags_add_btn).setOnClickListener(v ->
-                new TextInputDropdownDialogBuilder(this, R.string.flags)
-                        .setTitle(R.string.flags)
-                        .setDropdownItems(getAllFlags(), -1, true)
-                        .setNegativeButton(R.string.cancel, null)
-                        .setPositiveButton(R.string.ok, (dialog, which, inputText, isChecked) -> {
-                            if (!TextUtils.isEmpty(inputText) && mMutableIntent != null) {
-                                int i = getFlagIndex(String.valueOf(inputText).trim());
-                                if (i >= 0) {
-                                    mMutableIntent.addFlags(INTENT_FLAG_TO_STRING.keyAt(i));
-                                } else {
-                                    try {
-                                        int flag = IntegerCompat.decode(String.valueOf(inputText).trim());
-                                        mMutableIntent.addFlags(flag);
-                                    } catch (NumberFormatException e) {
-                                        return;
-                                    }
+        MaterialButton addFlagsButton = findViewById(R.id.intent_flags_add_btn);
+        addFlagsButton.setOnClickListener(v -> {
+            UiUtils.fixFocus(addFlagsButton);
+            new TextInputDropdownDialogBuilder(this, R.string.flags)
+                    .setTitle(R.string.flags)
+                    .setDropdownItems(getAllFlags(), -1, true)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.ok, (dialog, which, inputText, isChecked) -> {
+                        if (!TextUtils.isEmpty(inputText) && mMutableIntent != null) {
+                            int i = getFlagIndex(String.valueOf(inputText).trim());
+                            if (i >= 0) {
+                                mMutableIntent.addFlags(INTENT_FLAG_TO_STRING.keyAt(i));
+                            } else {
+                                try {
+                                    int flag = IntegerCompat.decode(String.valueOf(inputText).trim());
+                                    mMutableIntent.addFlags(flag);
+                                } catch (NumberFormatException e) {
+                                    return;
                                 }
-                                mFlagsAdapter.setDefaultList(getFlags());
-                                showTextViewIntentData(null);
                             }
-                        })
-                        .show());
+                            mFlagsAdapter.setDefaultList(getFlags());
+                            showTextViewIntentData(null);
+                            showResetIntentButton(true);
+                        }
+                    })
+                    .show();
+        });
         RecyclerView flagsRecyclerView = findViewById(R.id.intent_flags);
-        flagsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        flagsRecyclerView.setLayoutManager(UIUtils.getGridLayoutAt450Dp(this));
         mFlagsAdapter = new FlagsRecyclerViewAdapter(this);
         flagsRecyclerView.setAdapter(mFlagsAdapter);
 
         // Setup extras
-        findViewById(R.id.intent_extras_add_btn).setOnClickListener(v -> {
+        MaterialButton addExtrasButton = findViewById(R.id.intent_extras_add_btn);
+        addExtrasButton.setOnClickListener(v -> {
+            UiUtils.fixFocus(addExtrasButton);
             AddIntentExtraFragment fragment = new AddIntentExtraFragment();
             fragment.setOnSaveListener((mode, prefItem) -> {
                 if (mMutableIntent != null) {
                     IntentCompat.addToIntent(mMutableIntent, prefItem);
                     mExtrasAdapter.setDefaultList(getExtras());
+                    showResetIntentButton(true);
                 }
             });
             Bundle args = new Bundle();
@@ -645,7 +679,7 @@ public class ActivityInterceptor extends BaseActivity {
             fragment.show(getSupportFragmentManager(), AddIntentExtraFragment.TAG);
         });
         RecyclerView extrasRecyclerView = findViewById(R.id.intent_extras);
-        extrasRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        extrasRecyclerView.setLayoutManager(UIUtils.getGridLayoutAt450Dp(this));
         mExtrasAdapter = new ExtrasRecyclerViewAdapter(this);
         extrasRecyclerView.setAdapter(mExtrasAdapter);
 
@@ -656,7 +690,7 @@ public class ActivityInterceptor extends BaseActivity {
             mActivitiesHeader.setVisibility(View.GONE);
         }
         RecyclerView matchingActivitiesRecyclerView = findViewById(R.id.intent_matching_activities);
-        matchingActivitiesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        matchingActivitiesRecyclerView.setLayoutManager(UIUtils.getGridLayoutAt450Dp(this));
         mMatchingActivitiesAdapter = new MatchingActivitiesRecyclerViewAdapter(this);
         matchingActivitiesRecyclerView.setAdapter(mMatchingActivitiesAdapter);
 
@@ -665,11 +699,13 @@ public class ActivityInterceptor extends BaseActivity {
 
         // Send Intent on clicking the resend intent button
         mResendIntentButton.setOnClickListener(v -> {
+            UiUtils.fixFocus(mResendIntentButton);
             if (mMutableIntent == null) return;
             launchIntent(mMutableIntent, mRequestedComponent == null);
         });
         // Reset Intent data on clicking the reset intent button
         mResetIntentButton.setOnClickListener(v -> {
+            UiUtils.fixFocus(mResetIntentButton);
             mAreTextWatchersActive = false;
             showInitialIntent(false);
             mAreTextWatchersActive = true;
@@ -1105,10 +1141,12 @@ public class ActivityInterceptor extends BaseActivity {
             holder.title.setText(category);
             holder.title.setTextIsSelectable(true);
             holder.actionIcon.setOnClickListener(v -> {
+                UiUtils.fixFocus(holder.actionIcon);
                 if (mActivity.mMutableIntent != null) {
                     mActivity.mMutableIntent.removeCategory(category);
                     setDefaultList(mActivity.mMutableIntent.getCategories());
                     mActivity.showTextViewIntentData(null);
+                    mActivity.showResetIntentButton(true);
                 }
             });
         }
@@ -1155,11 +1193,13 @@ public class ActivityInterceptor extends BaseActivity {
             holder.title.setText(flagName);
             holder.title.setTextIsSelectable(true);
             holder.actionIcon.setOnClickListener(v -> {
+                UiUtils.fixFocus(holder.actionIcon);
                 int i = INTENT_FLAG_TO_STRING.indexOfValue(flagName);
                 if (i >= 0 && mActivity.mMutableIntent != null) {
                     IntentCompat.removeFlags(mActivity.mMutableIntent, INTENT_FLAG_TO_STRING.keyAt(i));
                     setDefaultList(mActivity.getFlags());
                     mActivity.showTextViewIntentData(null);
+                    mActivity.showResetIntentButton(true);
                 }
             });
         }
@@ -1182,14 +1222,14 @@ public class ActivityInterceptor extends BaseActivity {
     }
 
     private static class ExtrasRecyclerViewAdapter extends RecyclerView.Adapter<ExtrasRecyclerViewAdapter.ViewHolder> {
-        private final List<Pair<String, Object>> mExtras = new ArrayList<>();
+        private final SimpleArrayMap<String, Object> mExtras = new SimpleArrayMap<>(0);
         private final ActivityInterceptor mActivity;
 
         public ExtrasRecyclerViewAdapter(ActivityInterceptor activity) {
             mActivity = activity;
         }
 
-        public void setDefaultList(@Nullable List<Pair<String, Object>> extras) {
+        public void setDefaultList(@Nullable SimpleArrayMap<String, Object> extras) {
             AdapterUtils.notifyDataSetChanged(this, mExtras, extras);
         }
 
@@ -1202,17 +1242,23 @@ public class ActivityInterceptor extends BaseActivity {
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            Pair<String, Object> extraItem = mExtras.get(position);
-            holder.title.setText(extraItem.first);
+            String key = mExtras.keyAt(position);
+            Object value = mExtras.valueAt(position);
+            holder.title.setText(key);
             holder.title.setTextIsSelectable(true);
-            holder.subtitle.setText(extraItem.second.toString());
+            holder.subtitle.setText(value.toString());
             holder.subtitle.setTextIsSelectable(true);
             holder.actionIcon.setOnClickListener(v -> {
+                UiUtils.fixFocus(holder.actionIcon);
                 if (mActivity.mMutableIntent != null) {
-                    mActivity.mMutableIntent.removeExtra(extraItem.first);
+                    mActivity.mMutableIntent.removeExtra(key);
                     mActivity.showTextViewIntentData(null);
-                    mExtras.remove(position);
-                    notifyItemRemoved(position);
+                    int pos = mExtras.indexOfKey(key);
+                    if (pos >= 0) {
+                        mExtras.removeAt(pos);
+                        notifyItemRemoved(pos);
+                    }
+                    mActivity.showResetIntentButton(true);
                 }
             });
         }
@@ -1274,6 +1320,7 @@ public class ActivityInterceptor extends BaseActivity {
             holder.icon.setTag(tag);
             ImageLoader.getInstance().displayImage(tag, info, holder.icon);
             holder.actionIcon.setOnClickListener(v -> {
+                UiUtils.fixFocus(holder.actionIcon);
                 Intent intent = new Intent(mActivity.mMutableIntent);
                 intent.setClassName(info.packageName, activityName);
                 IntentCompat.removeFlags(intent, Intent.FLAG_ACTIVITY_FORWARD_RESULT);

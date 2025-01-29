@@ -38,6 +38,8 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 
 import io.github.muntashirakon.AppManager.BaseActivity;
@@ -48,6 +50,9 @@ import io.github.muntashirakon.AppManager.apk.list.ListExporter;
 import io.github.muntashirakon.AppManager.backup.dialog.BackupRestoreDialogFragment;
 import io.github.muntashirakon.AppManager.batchops.BatchOpsManager;
 import io.github.muntashirakon.AppManager.batchops.BatchOpsService;
+import io.github.muntashirakon.AppManager.batchops.BatchQueueItem;
+import io.github.muntashirakon.AppManager.batchops.struct.BatchNetPolicyOptions;
+import io.github.muntashirakon.AppManager.batchops.struct.IBatchOpOptions;
 import io.github.muntashirakon.AppManager.changelog.Changelog;
 import io.github.muntashirakon.AppManager.changelog.ChangelogParser;
 import io.github.muntashirakon.AppManager.changelog.ChangelogRecyclerAdapter;
@@ -74,7 +79,7 @@ import io.github.muntashirakon.AppManager.utils.StoragePermission;
 import io.github.muntashirakon.AppManager.utils.UIUtils;
 import io.github.muntashirakon.dialog.AlertDialogBuilder;
 import io.github.muntashirakon.dialog.ScrollableDialogBuilder;
-import io.github.muntashirakon.dialog.SearchableMultiChoiceDialogBuilder;
+import io.github.muntashirakon.dialog.SearchableFlagsDialogBuilder;
 import io.github.muntashirakon.dialog.SearchableSingleChoiceDialogBuilder;
 import io.github.muntashirakon.io.Paths;
 import io.github.muntashirakon.multiselection.MultiSelectionActionsView;
@@ -214,7 +219,7 @@ public class MainActivity extends BaseActivity implements AdvancedSearchView.OnQ
 
         mAdapter = new MainRecyclerAdapter(MainActivity.this);
         mAdapter.setHasStableIds(true);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(UIUtils.getGridLayoutAt450Dp(this));
         recyclerView.setAdapter(mAdapter);
         mMultiSelectionView = findViewById(R.id.selection_view);
         mMultiSelectionView.setOnItemSelectedListener(this);
@@ -401,11 +406,15 @@ public class MainActivity extends BaseActivity implements AdvancedSearchView.OnQ
             ArrayMap<Integer, String> netPolicyMap = NetworkPolicyManagerCompat.getAllReadablePolicies(this);
             Integer[] polices = new Integer[netPolicyMap.size()];
             String[] policyStrings = new String[netPolicyMap.size()];
+            Collection<ApplicationItem> applicationItems = viewModel.getSelectedPackages().values();
+            Iterator<ApplicationItem> it = applicationItems.iterator();
+            int selectedPolicies = applicationItems.size() == 1 && it.hasNext() ?
+                    NetworkPolicyManagerCompat.getUidPolicy(it.next().uid) : 0;
             for (int i = 0; i < netPolicyMap.size(); ++i) {
                 polices[i] = netPolicyMap.keyAt(i);
                 policyStrings[i] = netPolicyMap.valueAt(i);
             }
-            new SearchableMultiChoiceDialogBuilder<>(this, polices, policyStrings)
+            new SearchableFlagsDialogBuilder<>(this, polices, policyStrings, selectedPolicies)
                     .setTitle(R.string.net_policy)
                     .showSelectAll(false)
                     .setNegativeButton(R.string.cancel, null)
@@ -414,9 +423,8 @@ public class MainActivity extends BaseActivity implements AdvancedSearchView.OnQ
                         for (int flag : selections) {
                             flags |= flag;
                         }
-                        Bundle args = new Bundle();
-                        args.putInt(BatchOpsManager.ARG_NET_POLICIES, flags);
-                        handleBatchOp(BatchOpsManager.OP_NET_POLICY, args);
+                        BatchNetPolicyOptions options = new BatchNetPolicyOptions(flags);
+                        handleBatchOp(BatchOpsManager.OP_NET_POLICY, options);
                     })
                     .show();
         } else if (id == R.id.action_optimize) {
@@ -564,15 +572,13 @@ public class MainActivity extends BaseActivity implements AdvancedSearchView.OnQ
         handleBatchOp(op, null);
     }
 
-    private void handleBatchOp(@BatchOpsManager.OpType int op, @Nullable Bundle args) {
+    private void handleBatchOp(@BatchOpsManager.OpType int op, @Nullable IBatchOpOptions options) {
         if (viewModel == null) return;
         showProgressIndicator(true);
         Intent intent = new Intent(this, BatchOpsService.class);
         BatchOpsManager.Result input = new BatchOpsManager.Result(viewModel.getSelectedPackagesWithUsers());
-        intent.putStringArrayListExtra(BatchOpsService.EXTRA_OP_PKG, input.getFailedPackages());
-        intent.putIntegerArrayListExtra(BatchOpsService.EXTRA_OP_USERS, input.getAssociatedUserHandles());
-        intent.putExtra(BatchOpsService.EXTRA_OP, op);
-        intent.putExtra(BatchOpsService.EXTRA_OP_EXTRA_ARGS, args);
+        BatchQueueItem item = BatchQueueItem.getBatchOpQueue(op, input.getFailedPackages(), input.getAssociatedUsers(), options);
+        intent.putExtra(BatchOpsService.EXTRA_QUEUE_ITEM, item);
         ContextCompat.startForegroundService(this, intent);
     }
 

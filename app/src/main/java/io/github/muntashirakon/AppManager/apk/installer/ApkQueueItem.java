@@ -6,6 +6,7 @@ import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerA
 import static io.github.muntashirakon.AppManager.apk.installer.PackageInstallerActivity.EXTRA_PACKAGE_NAME;
 import static io.github.muntashirakon.AppManager.apk.installer.SupportedAppStores.isAppStoreSupported;
 
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
@@ -17,14 +18,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.os.ParcelCompat;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 import io.github.muntashirakon.AppManager.apk.ApkSource;
+import io.github.muntashirakon.AppManager.history.IJsonSerializer;
+import io.github.muntashirakon.AppManager.history.JsonDeserializer;
 import io.github.muntashirakon.AppManager.intercept.IntentCompat;
+import io.github.muntashirakon.AppManager.utils.ContextUtils;
+import io.github.muntashirakon.AppManager.utils.ExUtils;
+import io.github.muntashirakon.AppManager.utils.JSONUtils;
 
-public class ApkQueueItem implements Parcelable {
+public class ApkQueueItem implements Parcelable, IJsonSerializer {
     @NonNull
     static List<ApkQueueItem> fromIntent(@NonNull Intent intent,
                                          @Nullable String originatingPackage) {
@@ -38,13 +47,18 @@ public class ApkQueueItem implements Parcelable {
         if (uris == null) {
             return apkQueueItems;
         }
+        ContentResolver cr = ContextUtils.getContext().getContentResolver();
         String mimeType = intent.getType();
         Uri originatingUri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_ORIGINATING_URI, Uri.class);
+        int takeFlags = intent.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         for (Uri uri : uris) {
             ApkQueueItem item = new ApkQueueItem(ApkSource.getCachedApkSource(uri, mimeType));
             item.mOriginatingUri = originatingUri;
             item.mOriginatingPackage = originatingPackage;
             apkQueueItems.add(item);
+            if (takeFlags > 0) {
+                ExUtils.exceptionAsIgnored(() -> cr.takePersistableUriPermission(uri, takeFlags));
+            }
         }
         return apkQueueItems;
     }
@@ -168,6 +182,37 @@ public class ApkQueueItem implements Parcelable {
         dest.writeParcelable(mInstallerOptions, flags);
         dest.writeStringList(mSelectedSplits);
     }
+
+    protected ApkQueueItem(@NonNull JSONObject jsonObject) throws JSONException {
+        mPackageName = JSONUtils.optString(jsonObject, "package_name", null);
+        mAppLabel = JSONUtils.optString(jsonObject, "app_label", null);
+        mInstallExisting = jsonObject.optBoolean("install_existing", false);
+        mOriginatingPackage = JSONUtils.optString(jsonObject, "originating_package", null);
+        String originatingUri = JSONUtils.optString(jsonObject, "originating_uri", null);
+        mOriginatingUri = originatingUri != null ? Uri.parse(originatingUri) : null;
+        JSONObject apkSource = jsonObject.optJSONObject("apk_source");
+        mApkSource = apkSource != null ? ApkSource.DESERIALIZER.deserialize(apkSource) : null;
+        JSONObject installerOptions = jsonObject.optJSONObject("installer_options");
+        mInstallerOptions = installerOptions != null ? InstallerOptions.DESERIALIZER.deserialize(installerOptions) : null;
+        mSelectedSplits = JSONUtils.getArray(jsonObject.optJSONArray("selected_splits"));
+    }
+
+    @NonNull
+    @Override
+    public JSONObject serializeToJson() throws JSONException {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("package_name", mPackageName);
+        jsonObject.put("app_label", mAppLabel);
+        jsonObject.put("install_existing", mInstallExisting);
+        jsonObject.put("originating_package", mOriginatingPackage);
+        jsonObject.put("originating_uri", mOriginatingUri != null ? mOriginatingUri.toString() : null);
+        jsonObject.put("apk_source", mApkSource != null ? mApkSource.serializeToJson() : null);
+        jsonObject.put("installer_options", mInstallerOptions != null ? mInstallerOptions.serializeToJson() : null);
+        jsonObject.put("selected_splits", JSONUtils.getJSONArray(mSelectedSplits));
+        return jsonObject;
+    }
+
+    public static final JsonDeserializer.Creator<ApkQueueItem> DESERIALIZER = ApkQueueItem::new;
 
     public static final Creator<ApkQueueItem> CREATOR = new Creator<ApkQueueItem>() {
         @Override

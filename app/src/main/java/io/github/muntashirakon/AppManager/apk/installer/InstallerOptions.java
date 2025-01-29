@@ -15,10 +15,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.os.ParcelCompat;
 
-import io.github.muntashirakon.AppManager.BuildConfig;
-import io.github.muntashirakon.AppManager.settings.Prefs;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-public class InstallerOptions implements Parcelable {
+import io.github.muntashirakon.AppManager.BuildConfig;
+import io.github.muntashirakon.AppManager.history.IJsonSerializer;
+import io.github.muntashirakon.AppManager.history.JsonDeserializer;
+import io.github.muntashirakon.AppManager.settings.Prefs;
+import io.github.muntashirakon.AppManager.utils.JSONUtils;
+
+public class InstallerOptions implements Parcelable, IJsonSerializer {
     @NonNull
     public static InstallerOptions getDefault() {
         return new InstallerOptions();
@@ -102,6 +108,41 @@ public class InstallerOptions implements Parcelable {
         dest.writeByte((byte) (mForceDexOpt ? 1 : 0));
         dest.writeByte((byte) (mBlockTrackers ? 1 : 0));
     }
+
+    protected InstallerOptions(@NonNull JSONObject jsonObject) throws JSONException {
+        mUserId = jsonObject.getInt("user_id");
+        mInstallLocation = jsonObject.getInt("install_location");
+        mInstallerName = JSONUtils.optString(jsonObject, "installer_name", null);
+        mOriginatingPackage = JSONUtils.optString(jsonObject, "originating_package");
+        String originatingUri = JSONUtils.optString(jsonObject, "originating_uri", null);
+        mOriginatingUri = originatingUri != null ? Uri.parse(originatingUri) : null;
+        mPackageSource = jsonObject.getInt("package_source");
+        mInstallScenario = jsonObject.getInt("install_scenario");
+        mRequestUpdateOwnership = jsonObject.getBoolean("request_update_ownership");
+        mSignApkFiles = jsonObject.getBoolean("sign_apk_files");
+        mForceDexOpt = jsonObject.getBoolean("force_dex_opt");
+        mBlockTrackers = jsonObject.getBoolean("block_trackers");
+    }
+
+    @NonNull
+    @Override
+    public JSONObject serializeToJson() throws JSONException {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("user_id", mUserId);
+        jsonObject.put("install_location", mInstallLocation);
+        jsonObject.put("installer_name", mInstallerName);
+        jsonObject.put("originating_package", mOriginatingPackage);
+        jsonObject.put("originating_uri", mOriginatingUri != null ? mOriginatingUri.toString() : null);
+        jsonObject.put("package_source", mPackageSource);
+        jsonObject.put("install_scenario", mInstallScenario);
+        jsonObject.put("request_update_ownership", mRequestUpdateOwnership);
+        jsonObject.put("sign_apk_files", mSignApkFiles);
+        jsonObject.put("force_dex_opt", mForceDexOpt);
+        jsonObject.put("block_trackers", mBlockTrackers);
+        return jsonObject;
+    }
+
+    public static final JsonDeserializer.Creator<InstallerOptions> DESERIALIZER = InstallerOptions::new;
 
     @Override
     public int describeContents() {

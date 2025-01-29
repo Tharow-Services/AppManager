@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import io.github.muntashirakon.AppManager.BuildConfig;
@@ -156,13 +155,13 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
         }
     }
 
-    public void addWithFilter(@NonNull LogLine object, @Nullable CharSequence text, boolean notify) {
+    public void addWithFilter(@NonNull LogLine object, @Nullable SearchCriteria searchCriteria, boolean notify) {
         if (mOriginalValues != null) {
             List<LogLine> inputList = Collections.singletonList(object);
             if (mFilter == null) {
                 mFilter = new ArrayFilter();
             }
-            List<LogLine> filteredObjects = mFilter.performFilteringOnList(inputList, text);
+            List<LogLine> filteredObjects = mFilter.performFilteringOnList(inputList, searchCriteria);
             synchronized (mLock) {
                 mOriginalValues.add(object);
                 mObjects.addAll(filteredObjects);
@@ -367,10 +366,9 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
         t.setVisibility(logLine.getLogLevel() == -1 ? View.GONE : View.VISIBLE);
 
         holder.itemView.setBackgroundResource(0);
-        View contentView = holder.itemView.findViewById(R.id.log_content);
-        contentView.setBackgroundResource(position % 2 == 0 ? io.github.muntashirakon.ui.R.drawable.item_semi_transparent : io.github.muntashirakon.ui.R.drawable.item_transparent);
+        holder.contentView.setBackgroundResource(position % 2 == 0 ? io.github.muntashirakon.ui.R.drawable.item_semi_transparent : io.github.muntashirakon.ui.R.drawable.item_transparent);
 
-        //OUTPUT TEXT VIEW
+        // Display message
         TextView output = holder.output;
         output.setSingleLine(!logLine.isExpanded());
         output.setText(logLine.getLogOutput());
@@ -382,17 +380,24 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
         tag.setVisibility(logLine.getLogLevel() == -1 ? View.GONE : View.VISIBLE);
 
         //EXPANDED INFO
-        boolean extraInfoIsVisible = logLine.isExpanded() && logLine.getProcessId() != -1 // -1 marks lines like 'beginning of /dev/log...'
+        boolean extraInfoIsVisible = logLine.isExpanded() && logLine.getPid() != -1 // -1 marks lines like 'beginning of /dev/log...'
                 && Prefs.LogViewer.showPidTidTimestamp();
 
-        TextView pidText = holder.pid;
-        pidText.setVisibility(extraInfoIsVisible ? View.VISIBLE : View.GONE);
-        TextView timestampText = holder.itemView.findViewById(R.id.timestamp_text);
-        timestampText.setVisibility(extraInfoIsVisible ? View.VISIBLE : View.GONE);
+        TextView infoText = holder.info;
+        infoText.setVisibility(extraInfoIsVisible ? View.VISIBLE : View.GONE);
 
         if (extraInfoIsVisible) {
-            pidText.setText(logLine.getProcessId() != -1 ? Integer.toString(logLine.getProcessId()) : null);
-            timestampText.setText(logLine.getTimestamp());
+            StringBuilder sb = new StringBuilder(logLine.getTimestamp());
+            if (logLine.getPid() >= 0) {
+                sb.append(" • ").append(logLine.getPid());
+            }
+            if (logLine.getUidOwner() != null) {
+                sb.append(" • ").append(logLine.getUidOwner());
+            }
+            if (logLine.getPackageName() != null) {
+                sb.append(" • ").append(logLine.getPackageName());
+            }
+            infoText.setText(sb);
         }
 
         tag.setTextColor(getOrCreateTagColor(context, logLine.getTagName()));
@@ -403,7 +408,8 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
             if (isInSelectionMode()) {
                 toggleSelection(position);
             } else {
-                logLine.setExpanded(!logLine.isExpanded());
+                LogLine line = holder.logLine;
+                line.setExpanded(!line.isExpanded());
                 notifyItemChanged(position);
             }
         });
@@ -426,14 +432,14 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
                     .setIcon(io.github.muntashirakon.ui.R.drawable.ic_search)
                     .setOnMenuItemClickListener(menuItem -> {
                         if (mSearchByClickListener != null) {
-                            return mSearchByClickListener.onSearchByClick(menuItem, logLine);
+                            return mSearchByClickListener.onSearchByClick(menuItem, holder.logLine);
                         }
                         return true;
                     });
             menu.add(R.string.copy_to_clipboard)
                     .setIcon(R.drawable.ic_content_copy)
                     .setOnMenuItemClickListener(menuItem -> {
-                        Utils.copyToClipboard(context, null, logLine.getOriginalLine());
+                        Utils.copyToClipboard(context, null, holder.logLine.getOriginalLine());
                         return true;
                     });
             menu.add(R.string.item_select)
@@ -523,7 +529,8 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
                 }
             }
 
-            ArrayList<LogLine> allValues = performFilteringOnList(mOriginalValues, prefix);
+            SearchCriteria searchCriteria = new SearchCriteria(prefix != null ? prefix.toString() : null);
+            ArrayList<LogLine> allValues = performFilteringOnList(mOriginalValues, searchCriteria);
 
             results.values = allValues;
             results.count = allValues.size();
@@ -531,9 +538,7 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
             return results;
         }
 
-        public ArrayList<LogLine> performFilteringOnList(List<LogLine> inputList, CharSequence query) {
-            SearchCriteria searchCriteria = new SearchCriteria(query);
-
+        public ArrayList<LogLine> performFilteringOnList(List<LogLine> inputList, @Nullable SearchCriteria searchCriteria) {
             // search by log level
             ArrayList<LogLine> allValues = new ArrayList<>();
 
@@ -550,7 +555,7 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
             ArrayList<LogLine> finalValues = allValues;
 
             // search by criteria
-            if (!searchCriteria.isEmpty()) {
+            if (searchCriteria != null && !searchCriteria.isEmpty()) {
                 final int count = allValues.size();
                 final ArrayList<LogLine> newValues = new ArrayList<>(count);
                 for (final LogLine value : allValues) {
@@ -593,17 +598,19 @@ public class LogViewerRecyclerAdapter extends MultiSelectionView.Adapter<LogView
 
     public static class ViewHolder extends MultiSelectionView.ViewHolder {
         LogLine logLine;
+        View contentView;
         TextView logLevel;
         TextView tag;
         TextView output;
-        TextView pid;
+        TextView info;
 
         public ViewHolder(View itemView) {
             super(itemView);
+            contentView = itemView.findViewById(R.id.log_content);
             logLevel = itemView.findViewById(R.id.log_level_text);
             tag = itemView.findViewById(R.id.tag_text);
             output = itemView.findViewById(R.id.log_output_text);
-            pid = itemView.findViewById(R.id.pid_text);
+            info = itemView.findViewById(R.id.info);
         }
 
         public interface OnSearchByClickListener {

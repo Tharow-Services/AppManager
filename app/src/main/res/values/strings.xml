@@ -1489,4 +1489,13 @@
     <string name="activity_name">Activity Name</string>
     <string name="available_memory">Available: %s</string>
     <string name="action_manual">Manual</string>
+    <string name="vulkan_version">Vulkan version</string>
+    <string name="battery_technology">Technology</string>
+    <string name="battery_health">Health</string>
+    <string name="verified_boot">Verified boot</string>
+    <string name="android_verified_bootloader_version">AVB version</string>
+    <string name="op_history">History</string>
+    <string name="no_history">No history</string>
+    <string name="title_confirm_execution">Confirm execution</string>
+    <string name="clear_history">Clear history</string>
 </resources>
