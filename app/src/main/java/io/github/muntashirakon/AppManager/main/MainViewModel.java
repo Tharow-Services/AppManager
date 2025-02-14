@@ -2,12 +2,16 @@
 
 package io.github.muntashirakon.AppManager.main;
 
+import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Intent;
+import android.content.om.OverlayInfo;
+import android.content.om.OverlayInfoHidden;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserHandleHidden;
@@ -44,10 +48,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BinaryOperator;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
+import dev.rikka.tools.refine.Refine;
 import io.github.muntashirakon.AppManager.apk.list.ListExporter;
 import io.github.muntashirakon.AppManager.backup.BackupUtils;
 import io.github.muntashirakon.AppManager.compat.ActivityManagerCompat;
+import io.github.muntashirakon.AppManager.compat.OverlayManagerCompact;
 import io.github.muntashirakon.AppManager.compat.PackageManagerCompat;
 import io.github.muntashirakon.AppManager.db.entity.App;
 import io.github.muntashirakon.AppManager.db.utils.AppDb;
@@ -60,6 +72,7 @@ import io.github.muntashirakon.AppManager.settings.Prefs;
 import io.github.muntashirakon.AppManager.types.PackageChangeReceiver;
 import io.github.muntashirakon.AppManager.types.UserPackagePair;
 import io.github.muntashirakon.AppManager.users.Users;
+import io.github.muntashirakon.AppManager.utils.AppPref;
 import io.github.muntashirakon.AppManager.utils.ArrayUtils;
 import io.github.muntashirakon.AppManager.utils.MultithreadedExecutor;
 import io.github.muntashirakon.AppManager.utils.PackageUtils;
@@ -85,6 +98,10 @@ public class MainViewModel extends AndroidViewModel implements ListOptions.ListO
     private final Map<String, ApplicationItem> mSelectedPackageApplicationItemMap = Collections.synchronizedMap(new LinkedHashMap<>());
     final MultithreadedExecutor executor = MultithreadedExecutor.getNewInstance();
 
+    private List<String> hasOverlaysList;
+    private List<String> isOverlayList;
+
+    @SuppressLint("NewApi")
     public MainViewModel(@NonNull Application application) {
         super(application);
         Log.d("MVM", "New instance created");
@@ -97,6 +114,15 @@ public class MainViewModel extends AndroidViewModel implements ListOptions.ListO
         mFilterProfileName = Prefs.MainPage.getFilteredProfileName();
         mSelectedUsers = null; // TODO: 5/6/23 Load from prefs?
         if ("".equals(mFilterProfileName)) mFilterProfileName = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Map<String, List<OverlayInfo>> locals = OverlayManagerCompact.getOverlayManager().getAllOverlays(UserHandleHidden.myUserId());
+            hasOverlaysList = new ArrayList<>();
+            isOverlayList = new ArrayList<>();
+            for (Map.Entry<String, List<OverlayInfo>> entry : locals.entrySet()) {
+                hasOverlaysList.add(entry.getKey());
+                isOverlayList.addAll(entry.getValue().stream().map(o -> Refine.<OverlayInfoHidden>unsafeCast(o).packageName).collect(Collectors.toList()));
+            }
+        }
     }
 
     private final MutableLiveData<Boolean> mOperationStatus = new MutableLiveData<>();
@@ -466,7 +492,12 @@ public class MainViewModel extends AndroidViewModel implements ListOptions.ListO
                         continue;
                     } else if ((mFilterFlags & MainListOptions.FILTER_STOPPED_APPS) != 0 && (item.flags & ApplicationInfo.FLAG_STOPPED) == 0) {
                         continue;
+                    } else if ((mFilterFlags & MainListOptions.FILTER_OVERLAYS_APPS) !=0 && (isOverlayList.contains(item.packageName))) {
+                        continue;
+                    } else if (((mFilterFlags & MainListOptions.FILTER_APPS_WITH_OVERLAYS) !=0 && (!hasOverlaysList.contains(item.packageName)))) {
+                        continue;
                     }
+
                     filteredApplicationItems.add(item);
                 }
                 if (!TextUtils.isEmpty(mSearchQuery)) {
