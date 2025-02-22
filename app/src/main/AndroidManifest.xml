@@ -10,6 +10,7 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission
         android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"
@@ -19,6 +20,9 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission
         android:name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.CHANGE_OVERLAY_PACKAGES"
         tools:ignore="ProtectedPermissions" />
     <uses-permission
         android:name="android.permission.CLEAR_APP_CACHE"
@@ -479,6 +483,15 @@
             android:exported="true"
             android:label="@string/app_info"
             android:targetActivity=".details.AppDetailsActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data
+                    android:host="details"
+                    android:scheme="app-manager" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 

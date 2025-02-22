@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Parcel;
 
 import androidx.annotation.NonNull;
+import androidx.core.os.ParcelCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -13,6 +14,7 @@ import org.json.JSONObject;
 import java.util.Objects;
 
 import io.github.muntashirakon.AppManager.backup.convert.ImportType;
+import io.github.muntashirakon.AppManager.history.JsonDeserializer;
 
 public class BatchBackupImportOptions implements IBatchOpOptions {
     public static final String TAG = BatchBackupImportOptions.class.getSimpleName();
@@ -46,7 +48,8 @@ public class BatchBackupImportOptions implements IBatchOpOptions {
 
     protected BatchBackupImportOptions(@NonNull Parcel in) {
         mImportType = in.readInt();
-        mDirectory = Objects.requireNonNull(in.readParcelable(Uri.class.getClassLoader()));
+        mDirectory = Objects.requireNonNull(ParcelCompat.readParcelable(in,
+                Uri.class.getClassLoader(), Uri.class));
         mRemoveImportedDirectory = in.readByte() != 0;
     }
 
@@ -75,6 +78,16 @@ public class BatchBackupImportOptions implements IBatchOpOptions {
         dest.writeParcelable(mDirectory, flags);
         dest.writeByte((byte) (mRemoveImportedDirectory ? 1 : 0));
     }
+
+    protected BatchBackupImportOptions(@NonNull JSONObject jsonObject) throws JSONException {
+        assert jsonObject.getString("tag").equals(TAG);
+        mImportType = jsonObject.getInt("import_type");
+        mDirectory = Uri.parse(jsonObject.getString("directory"));
+        mRemoveImportedDirectory = jsonObject.getBoolean("remove_imported_directory");
+    }
+
+    public static final JsonDeserializer.Creator<BatchBackupImportOptions> DESERIALIZER
+            = BatchBackupImportOptions::new;
 
     @NonNull
     @Override
