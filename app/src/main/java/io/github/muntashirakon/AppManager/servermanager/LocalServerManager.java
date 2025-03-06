@@ -4,6 +4,7 @@ package io.github.muntashirakon.AppManager.servermanager;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 
 import androidx.annotation.AnyThread;
@@ -269,7 +270,13 @@ class LocalServerManager {
             useAdbStartServer();
         } else if (Ops.isDirectRoot()) {
             useRootStartServer();
+        } else if (Ops.isSystem()) {
+            useSystemStartServer();
         } else throw new Exception("Neither root nor ADB mode is enabled.");
+    }
+
+    @WorkerThread
+    private void useSystemStartServer() {
     }
 
     /**

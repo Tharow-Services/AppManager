@@ -21,13 +21,33 @@ import io.github.muntashirakon.AppManager.logs.Log;
 import io.github.muntashirakon.AppManager.misc.NoOps;
 import io.github.muntashirakon.AppManager.utils.ThreadUtils;
 
-class ServiceConnectionWrapper {
+class ServiceConnectionWrapper implements ServiceConnection {
     public static final String TAG = ServiceConnectionWrapper.class.getSimpleName();
 
     @Nullable
     private IBinder mIBinder;
     @Nullable
     private CountDownLatch mServiceBoundWatcher;
+
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder service) {
+        mServiceConnection.onServiceConnected(name, service);
+    }
+
+    @Override
+    public void onServiceDisconnected(ComponentName name) {
+        mServiceConnection.onServiceDisconnected(name);
+    }
+
+    @Override
+    public void onBindingDied(ComponentName name) {
+        mServiceConnection.onBindingDied(name);
+    }
+
+    @Override
+    public void onNullBinding(ComponentName name) {
+        mServiceConnection.onNullBinding(name);
+    }
 
     private class ServiceConnectionImpl implements ServiceConnection {
         @Override

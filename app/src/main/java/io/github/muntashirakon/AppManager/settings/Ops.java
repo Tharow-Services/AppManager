@@ -34,6 +34,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.muntashirakon.AppManager.IAMService;
 import io.github.muntashirakon.AppManager.R;
 import io.github.muntashirakon.AppManager.adb.AdbConnectionManager;
 import io.github.muntashirakon.AppManager.adb.AdbPairingService;
@@ -376,6 +377,7 @@ public class Ops {
             if (uid == SYSTEM_UID) {
                 sIsRoot = sIsAdb = false;
                 sIsSystem = true;
+                ThreadUtils.postOnMainThread(()-> UIUtils.displayLongToast(R.string.working_on_system_mode));
                 return;
             }
             if (uid == SHELL_UID) {

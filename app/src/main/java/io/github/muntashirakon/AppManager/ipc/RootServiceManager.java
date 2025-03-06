@@ -106,6 +106,7 @@ public class RootServiceManager implements Handler.Callback {
         return sInstance;
     }
 
+    @NonNull
     @SuppressLint("WrongConstant")
     static Intent getBroadcastIntent(IBinder binder, boolean isDaemon) {
         Bundle bundle = new Bundle();

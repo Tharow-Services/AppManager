@@ -4,6 +4,7 @@ package io.github.muntashirakon.AppManager.ipc;
 
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
@@ -84,7 +85,6 @@ public class LocalServices {
     @NonNull
     private static final ServiceConnectionWrapper sAMServiceConnectionWrapper
             = new ServiceConnectionWrapper(BuildConfig.APPLICATION_ID, AMService.class.getName());
-
     @WorkerThread
     @NoOps(used = true)
     private static void bindAmService() throws RemoteException {

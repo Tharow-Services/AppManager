@@ -35,6 +35,12 @@ android {
             keyPassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
             keyAlias 'key0'
         }
+        platform { //https://github.com/LineageOS/android_build/blob/lineage-22.1/target/product/security/platform.pk8
+            storeFile file('dev_keystore.jks')
+            storePassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
+            keyPassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
+            keyAlias 'key1'
+        }
     }
 
     buildTypes {
@@ -48,6 +54,11 @@ android {
             versionNameSuffix '-DEBUG'
             signingConfig signingConfigs.debug
             resValue "string", "app_name", "AM Debug"
+        }
+        platform {
+            initWith buildTypes.debug
+            matchingFallbacks = "debug"
+            signingConfig signingConfigs.platform
         }
     }
     lint {

@@ -578,6 +578,14 @@
             android:taskAffinity=""
             android:theme="@style/AppTheme.TransparentBackground">
             <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PRE_APPROVAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -640,6 +648,19 @@
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xapk" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.xapk" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.xapk" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".apk.installer.PackageUninstallerActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="true"
+            android:label="@string/uninstall">
+            <intent-filter>
+                <action android:name="android.intent.action.DELETE" />
+                <action android:name="android.intent.action.UNINSTALL_PACKAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="package" />
             </intent-filter>
         </activity>
         <activity
@@ -1199,7 +1220,8 @@
         <service
             android:name=".apk.installer.PackageInstallerService"
             android:exported="false"
-            android:foregroundServiceType="dataSync|specialUse" />
+            android:foregroundServiceType="dataSync|specialUse"
+            android:process="system" />
         <service
             android:name=".batchops.BatchOpsService"
             android:exported="false"
@@ -1240,6 +1262,14 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|specialUse"
             tools:targetApi="r" />
+        <service
+            android:name=".ipc.SystemService"
+            android:enabled="true"
+            android:exported="false"
+            android:isolatedProcess="false"
+            android:process="system"
+            android:permission="android.permission.BIND_JOB_SERVICE">
+        </service>
 
         <receiver
             android:name=".servermanager.ServerStatusChangeReceiver"
