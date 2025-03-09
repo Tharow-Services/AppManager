@@ -6,6 +6,7 @@ import static io.github.muntashirakon.AppManager.compat.VirtualDeviceManagerComp
 
 import android.annotation.SuppressLint;
 import android.annotation.UserIdInt;
+import android.app.admin.DevicePolicyManager;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.IPackageManagerN;
@@ -29,6 +30,8 @@ import java.util.Collections;
 import java.util.List;
 
 import dev.rikka.tools.refine.Refine;
+import io.github.muntashirakon.AppManager.dpc.DpcActivity;
+import io.github.muntashirakon.AppManager.dpc.DpcReviewer;
 import io.github.muntashirakon.AppManager.ipc.ProxyBinder;
 import io.github.muntashirakon.AppManager.utils.ContextUtils;
 import io.github.muntashirakon.AppManager.utils.ExUtils;
@@ -364,6 +367,7 @@ public final class PermissionCompat {
                                        @UserIdInt int userId)
             throws RemoteException {
         IPackageManager pm = PackageManagerCompat.getPackageManager();
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             IPermissionManager permissionManager = getPermissionManager();
             try {
@@ -381,6 +385,10 @@ public final class PermissionCompat {
             getPermissionManager().grantRuntimePermission(packageName, permissionName, userId);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pm.grantRuntimePermission(packageName, permissionName, userId);
+            DevicePolicyManager manager = DevicePolicyManagerCompat.getDevicePolicyManager();
+            if (manager.getActiveAdmins().contains(DpcReviewer.getAdmin())) {
+            manager.setPermissionGrantState(DpcReviewer.getAdmin(), packageName, permissionName, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED);
+            }
         } else {
             pm.grantPermission(packageName, permissionName);
         }
@@ -423,6 +431,10 @@ public final class PermissionCompat {
             getPermissionManager().revokeRuntimePermission(packageName, permissionName, userId, reason);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pm.revokeRuntimePermission(packageName, permissionName, userId);
+            DevicePolicyManager manager = DevicePolicyManagerCompat.getDevicePolicyManager();
+            if (manager.getActiveAdmins().contains(DpcReviewer.getAdmin())) {
+                manager.setPermissionGrantState(DpcReviewer.getAdmin(), packageName, permissionName, DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED);
+            }
         } else {
             pm.revokePermission(packageName, permissionName);
         }

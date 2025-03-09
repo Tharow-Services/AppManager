@@ -169,6 +169,25 @@
         android:theme="@style/AppTheme"
         tools:ignore="UnusedAttribute">
         <activity
+            android:name=".dpc.DpcActivity"
+            android:exported="false"
+            android:enabled="true"/>
+        <receiver
+            android:name=".dpc.DpcReviewer"
+            android:exported="false"
+            android:enabled="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:label="@string/about_device"
+            android:description="@string/accessibility_service_description">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin"/>
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <activity
             android:name=".filters.FinderActivity"
             android:exported="false"
             android:label="@string/finder_title" />

@@ -30,7 +30,7 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file('dev_keystore.jks')
+            storeFile file('platform.jks')
             storePassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
             keyPassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
             keyAlias 'key0'
